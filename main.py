@@ -10,8 +10,9 @@ MIN_PULSE_INTERVAL_US = 1200  # デバウンス時間1.2ms(約50km/h以上に対
 MAX_1REV_US = 5000000  # 1周あたり最大5秒まで許容（低速手動確認用）
 STOP_TIMEOUT_US = 1000000  # 最後のパルスから1秒で停止判定
 MAX_UPDATE_DELAY_MS = 3000  # MAX値更新開始までの遅延時間（3秒）
-MAX_RESET_AFTER_STOP_MS = 10000  # 停止後10秒経過で次回リセット判定
-DISPLAY_SPEED_RESET_THRESHOLD = 10.0  # 停止後リセットを発動する最低速度(km/h)
+MAX_RESET_AFTER_STOP_MS = 5000  # 停止後5秒経過で次回リセット判定
+STOP_SPEED_THRESHOLD = 3.0  # この速度以下を停止判定とみなす(km/h)
+DISPLAY_SPEED_RESET_THRESHOLD = 5.0  # 停止後リセットを発動する最低速度(km/h)
 
 
 # --- ピン設定 ---
@@ -109,6 +110,14 @@ while True:
         sorted_hist = sorted(history)
         display_speed = sorted_hist[len(sorted_hist)//2]
 
+        if display_speed <= STOP_SPEED_THRESHOLD and stop_time_ms == 0:
+            stop_time_ms = time.ticks_ms()
+        elif display_speed > STOP_SPEED_THRESHOLD:
+            stop_time_ms = 0
+
+        if stop_time_ms != 0 and not reset_max_on_next_speed and time.ticks_diff(time.ticks_ms(), stop_time_ms) >= MAX_RESET_AFTER_STOP_MS:
+            reset_max_on_next_speed = True
+
         if reset_max_on_next_speed and display_speed >= DISPLAY_SPEED_RESET_THRESHOLD:
             max_speed = 0.0
             reset_max_on_next_speed = False
@@ -127,7 +136,7 @@ while True:
             stop_time_ms = time.ticks_ms()
         elif time.ticks_diff(time.ticks_ms(), stop_time_ms) >= MAX_RESET_AFTER_STOP_MS:
             reset_max_on_next_speed = True
-    else:
+    elif display_speed > STOP_SPEED_THRESHOLD:
         stop_time_ms = 0
         
     # 3. 画面の描画
@@ -145,7 +154,7 @@ while True:
     max_x = 128 - len(max_display) * 8
     oled.text(max_display, max_x, 0)
 
-    if stop_time_ms != 0 and not reset_max_on_next_speed:
+    if stop_time_ms != 0:
         remaining_ms = MAX_RESET_AFTER_STOP_MS - time.ticks_diff(time.ticks_ms(), stop_time_ms)
         if remaining_ms < 0:
             remaining_ms = 0
