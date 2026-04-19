@@ -10,6 +10,8 @@ MIN_PULSE_INTERVAL_US = 1200  # デバウンス時間1.2ms(約50km/h以上に対
 MAX_1REV_US = 5000000  # 1周あたり最大5秒まで許容（低速手動確認用）
 STOP_TIMEOUT_US = 1000000  # 最後のパルスから1秒で停止判定
 MAX_UPDATE_DELAY_MS = 3000  # MAX値更新開始までの遅延時間（3秒）
+MAX_RESET_AFTER_STOP_MS = 10000  # 停止後10秒経過で次回リセット判定
+DISPLAY_SPEED_RESET_THRESHOLD = 10.0  # 停止後リセットを発動する最低速度(km/h)
 
 
 # --- ピン設定 ---
@@ -45,6 +47,8 @@ history = []
 display_speed = 0.0
 max_speed = 0.0
 start_measuring_time = 0
+stop_time_ms = 0
+reset_max_on_next_speed = False
 # 【パルス抜け検知付きの割り込み処理】
 def calculate_speed(pin):
     global t_idx, valid_duration, new_data_flag, last_pulse_time, last_step_time
@@ -104,7 +108,11 @@ while True:
         
         sorted_hist = sorted(history)
         display_speed = sorted_hist[len(sorted_hist)//2]
-        
+
+        if reset_max_on_next_speed and display_speed >= DISPLAY_SPEED_RESET_THRESHOLD:
+            max_speed = 0.0
+            reset_max_on_next_speed = False
+
         # MAX_UPDATE_DELAY_MS経過後のMAX値更新
         if start_measuring_time > 0 and time.ticks_diff(time.ticks_ms(), start_measuring_time) > MAX_UPDATE_DELAY_MS:
             if display_speed > max_speed:
@@ -115,6 +123,13 @@ while True:
         display_speed = 0.0
         start_measuring_time = 0
         history = []
+        if stop_time_ms == 0:
+            stop_time_ms = time.ticks_ms()
+        elif time.ticks_diff(time.ticks_ms(), stop_time_ms) > MAX_RESET_AFTER_STOP_MS:
+            reset_max_on_next_speed = True
+    else:
+        stop_time_ms = 0
+        reset_max_on_next_speed = False
         
     # 3. 画面の描画
     oled.fill(0)
