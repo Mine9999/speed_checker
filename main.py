@@ -125,11 +125,10 @@ while True:
         history = []
         if stop_time_ms == 0:
             stop_time_ms = time.ticks_ms()
-        elif time.ticks_diff(time.ticks_ms(), stop_time_ms) > MAX_RESET_AFTER_STOP_MS:
+        elif time.ticks_diff(time.ticks_ms(), stop_time_ms) >= MAX_RESET_AFTER_STOP_MS:
             reset_max_on_next_speed = True
     else:
         stop_time_ms = 0
-        reset_max_on_next_speed = False
         
     # 3. 画面の描画
     oled.fill(0)
@@ -145,6 +144,15 @@ while True:
         max_display = f"MAX: {max_str}"
     max_x = 128 - len(max_display) * 8
     oled.text(max_display, max_x, 0)
-        
+
+    if stop_time_ms != 0 and not reset_max_on_next_speed:
+        remaining_ms = MAX_RESET_AFTER_STOP_MS - time.ticks_diff(time.ticks_ms(), stop_time_ms)
+        if remaining_ms < 0:
+            remaining_ms = 0
+        remaining_sec = remaining_ms // 1000
+        countdown_display = "{}s".format(remaining_sec)
+        countdown_x = 128 - len(countdown_display) * 8
+        oled.text(countdown_display, countdown_x, 24)
+
     oled.show()
     time.sleep(0.1) # 更新頻度を0.1秒(10FPS)にしてレスポンス向上
