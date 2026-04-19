@@ -9,6 +9,7 @@ CIRCUMFERENCE = ROLLER_DIAMETER * 3.14159 / 1000.0
 MIN_PULSE_INTERVAL_US = 1200  # デバウンス時間1.2ms(約50km/h以上に対応するため、1.2msに設定)
 MAX_1REV_US = 5000000  # 1周あたり最大5秒まで許容（低速手動確認用）
 STOP_TIMEOUT_US = 1000000  # 最後のパルスから1秒で停止判定
+MAX_UPDATE_DELAY_MS = 3000  # MAX値更新開始までの遅延時間（3秒）
 
 
 # --- ピン設定 ---
@@ -104,8 +105,8 @@ while True:
         sorted_hist = sorted(history)
         display_speed = sorted_hist[len(sorted_hist)//2]
         
-        # 5秒経過後のMAX値更新
-        if start_measuring_time > 0 and time.ticks_diff(time.ticks_ms(), start_measuring_time) > 5000:
+        # MAX_UPDATE_DELAY_MS経過後のMAX値更新
+        if start_measuring_time > 0 and time.ticks_diff(time.ticks_ms(), start_measuring_time) > MAX_UPDATE_DELAY_MS:
             if display_speed > max_speed:
                 max_speed = display_speed
 
@@ -119,15 +120,16 @@ while True:
     oled.fill(0)
     
     speed_str = "{:>4.1f}".format(display_speed)
-    big_text(speed_str, 0, 4)
+    big_text(speed_str, 0, 16)
     oled.text("km/h", 70, 20)
     
-    oled.text("MAX", 95, 0)
-    if start_measuring_time > 0 and time.ticks_diff(time.ticks_ms(), start_measuring_time) < 3000:
-        oled.text("---", 95, 12)
+    if max_speed == 0.0:
+        max_display = "MAX: ---"
     else:
-        max_str = "{:>4.1f}".format(max_speed)
-        oled.text(max_str, 95, 12)
+        max_str = "{:.1f}".format(max_speed)
+        max_display = f"MAX: {max_str}"
+    max_x = 128 - len(max_display) * 8
+    oled.text(max_display, max_x, 0)
         
     oled.show()
     time.sleep(0.1) # 更新頻度を0.1秒(10FPS)にしてレスポンス向上
