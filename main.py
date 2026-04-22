@@ -6,7 +6,11 @@ from ssd1306 import SSD1306_SPI
 # --- 設定 ---
 ROLLER_DIAMETER = 20.0
 CIRCUMFERENCE = ROLLER_DIAMETER * 3.14159 / 1000.0
-MIN_PULSE_INTERVAL_US = 1200  # デバウンス時間1.2ms(約50km/h以上に対応するため、1.2msに設定)
+NORMAL_DEBOUNCE_US = 2500  # Normalモードのデバウンス時間
+HIGH_DEBOUNCE_US = 1500    # Highモードのデバウンス時間
+HIGH_MODE_ENTER_KMH = 25.0  # 25km/h以上ならHighモードへ切り替え
+HIGH_MODE_EXIT_KMH = 23.0   # 23km/h未満ならNormalモードへ戻す
+debounce_threshold_us = NORMAL_DEBOUNCE_US
 MAX_1REV_US = 5000000  # 1周あたり最大5秒まで許容（低速手動確認用）
 STOP_TIMEOUT_US = 1000000  # 最後のパルスから1秒で停止判定
 MAX_UPDATE_DELAY_MS = 3000  # MAX値更新開始までの遅延時間（3秒）
@@ -59,7 +63,7 @@ def calculate_speed(pin):
         step_time = time.ticks_diff(now, last_pulse_time)
         
         # 1. チャタリング（ノイズ）弾き
-        if step_time < MIN_PULSE_INTERVAL_US:
+        if step_time < debounce_threshold_us:
             return
             
         # 2. パルス抜け検知（前回の磁石間隔の1.5倍以上の時間がかかったら無視）
@@ -110,6 +114,14 @@ while True:
         sorted_hist = sorted(history)
         display_speed = sorted_hist[len(sorted_hist)//2]
 
+        # 25km/h以上ならHighモードに移行、23km/h未満ならNormalモードに戻す
+        if debounce_threshold_us == NORMAL_DEBOUNCE_US:
+            if display_speed >= HIGH_MODE_ENTER_KMH:
+                debounce_threshold_us = HIGH_DEBOUNCE_US
+        else:
+            if display_speed < HIGH_MODE_EXIT_KMH:
+                debounce_threshold_us = NORMAL_DEBOUNCE_US
+
         if display_speed <= STOP_SPEED_THRESHOLD and stop_time_ms == 0:
             stop_time_ms = time.ticks_ms()
         elif display_speed > STOP_SPEED_THRESHOLD:
@@ -153,6 +165,9 @@ while True:
         max_display = f"MAX: {max_str}"
     max_x = 128 - len(max_display) * 8
     oled.text(max_display, max_x, 0)
+
+    mode = "High" if debounce_threshold_us == HIGH_DEBOUNCE_US else "Normal"
+    oled.text(mode, 0, 0)
 
     if stop_time_ms != 0:
         remaining_ms = MAX_RESET_AFTER_STOP_MS - time.ticks_diff(time.ticks_ms(), stop_time_ms)
