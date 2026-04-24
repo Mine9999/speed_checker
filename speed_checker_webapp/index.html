@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speed checker Web powerd by playTypus</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #0d0d0d;
+            --card-bg: #161616;
+            --accent-color: #00e676;
+            --danger-color: #ff1744;
+            --info-color: #2979ff;
+            --warning-color: #ffea00;
+            --text-color: #f0f0f0;
+        }
+        body { font-family: 'Segoe UI', sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 10px; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 100%; max-width: 1000px; background: var(--card-bg); padding: 20px; border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.6); }
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+        
+        /* 数値レイアウト */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .stat-group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; background: rgba(255,255,255,0.03); padding: 15px; border-radius: 12px; border-left: 4px solid #444; }
+        .speed-group { border-left-color: var(--accent-color); }
+        .rpm-group { border-left-color: var(--info-color); }
+        .accel-group { border-left-color: var(--warning-color); }
+        .stat-box { text-align: center; }
+        .value { font-size: 1.8rem; font-weight: 800; margin: 2px 0; }
+        .label { font-size: 0.65rem; font-weight: bold; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        /* 設定バー（重なり防止のためminmaxを160pxに拡大） */
+        .settings-bar { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); 
+            gap: 15px; 
+            background: rgba(0,0,0,0.3); 
+            padding: 15px; 
+            border-radius: 12px; 
+            margin-bottom: 20px; 
+        }
+        .setting-item { display: flex; flex-direction: column; gap: 5px; }
+        input, select { background: #222; border: 1px solid #333; color: white; padding: 8px; border-radius: 6px; width: 100%; box-sizing: border-box; }
+
+        .chart-viewport { width: 100%; overflow-x: auto; background: rgba(0,0,0,0.2); border-radius: 12px; margin-bottom: 10px; border: 1px solid #222; }
+        .chart-wrapper { height: 320px; }
+
+        .main-controls { display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; }
+        .header-actions { display: flex; gap: 10px; }
+
+        button { padding: 12px 24px; font-weight: bold; cursor: pointer; border: none; border-radius: 8px; transition: 0.2s; }
+        #connectBtn { background: var(--info-color); color: white; min-width: 150px; }
+        #demoBtn { background: #673ab7; color: white; }
+        #importBtn { background: #eee; color: #000; font-size: 0.85rem; }
+        #exportBtn { background: #f9ab00; color: #000; font-size: 0.85rem; }
+        #clearBtn { background: #444; color: white; }
+        input[type="file"] { display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <div>
+                <h2 style="margin:0; color: var(--accent-color); font-style: italic;">Speed checker Web powerd by playTypus</h2>
+                <div id="status" style="font-size: 0.75rem; color: #555; font-weight: bold; margin-top: 4px;">SYSTEM READY</div>
+            </div>
+            <div class="header-actions">
+                <button id="demoBtn">Demo</button>
+                <button id="importBtn">Import</button>
+                <button id="exportBtn">Export</button>
+                <input type="file" id="fileInput" accept=".csv">
+            </div>
+        </header>
+        
+        <div class="stats-grid">
+            <div class="stat-group speed-group">
+                <div class="stat-box"><div class="label">Current Spd</div><div id="curSpd" class="value">0.0</div></div>
+                <div class="stat-box"><div class="label">MAX Spd</div><div id="maxSpd" class="value" style="color:var(--danger-color)">0.0</div></div>
+            </div>
+            <div class="stat-group rpm-group">
+                <div class="stat-box"><div class="label">Current RPM</div><div id="curRpm" class="value">0</div></div>
+                <div class="stat-box"><div class="label">MAX RPM</div><div id="maxRpm" class="value" style="color:var(--info-color)">0</div></div>
+            </div>
+            <div class="stat-group accel-group">
+                <div class="stat-box"><div class="label">0-95% Time</div><div id="accelTime" class="value" style="color:var(--warning-color)">0.00</div><div class="label">sec</div></div>
+                <div class="stat-box"><div class="label">10s Jitter</div><div id="jitter" class="value">0.000</div><div class="label">Stability</div></div>
+            </div>
+        </div>
+
+        <div class="main-controls">
+            <button id="connectBtn">チェッカー接続</button>
+            <button id="clearBtn">クリア</button>
+        </div>
+
+        <div class="settings-bar">
+            <div class="setting-item"><label style="font-size:0.7rem; color:#777;">タイヤ径(mm)</label><input type="number" id="tireDia" value="26.0" step="0.1"></div>
+            <div class="setting-item"><label style="font-size:0.7rem; color:#777;">ギヤ比</label>
+                <select id="gearRatio"><option value="3.5">3.5:1</option><option value="3.7">3.7:1</option><option value="4.0">4.0:1</option><option value="4.2">4.2:1</option><option value="5.0">5.0:1</option></select>
+            </div>
+            <div class="setting-item"><label style="font-size:0.7rem; color:#777;">表示モード</label>
+                <select id="viewMode"><option value="scroll" selected>詳細(横スクロール)</option><option value="full">全体(圧縮)</option></select>
+            </div>
+        </div>
+
+        <div class="chart-viewport" id="chartViewport">
+            <div class="chart-wrapper" id="chartWrapper"><canvas id="speedChart"></canvas></div>
+        </div>
+
+        <div id="log" style="font-family: monospace; font-size: 0.75rem; color: #00ff00; background: #000; padding: 10px; border-radius: 8px; height: 50px; overflow-y: auto; opacity: 0.6;">Ready.</div>
+    </div>
+
+<script>
+    let port, reader, maxSpeed = 0, startTime = null, accelFinished = false;
+    let allData = { times: [], speeds: [] };
+    
+    const ui = {
+        curSpd: document.getElementById('curSpd'), maxSpd: document.getElementById('maxSpd'),
+        curRpm: document.getElementById('curRpm'), maxRpm: document.getElementById('maxRpm'),
+        accelTime: document.getElementById('accelTime'), jitter: document.getElementById('jitter'),
+        status: document.getElementById('status'), connBtn: document.getElementById('connectBtn'),
+        tire: document.getElementById('tireDia'), gear: document.getElementById('gearRatio'),
+        mode: document.getElementById('viewMode'), wrapper: document.getElementById('chartWrapper'), 
+        viewport: document.getElementById('chartViewport'), fileInput: document.getElementById('fileInput'),
+        demoBtn: document.getElementById('demoBtn'), log: document.getElementById('log')
+    };
+
+    const ctx = document.getElementById('speedChart').getContext('2d');
+    const chart = new Chart(ctx, {
+        type: 'line',
+        data: { labels: [], datasets: [{ data: [], borderColor: '#00e676', borderWidth: 2, fill: true, backgroundColor: 'rgba(0, 230, 118, 0.05)', tension: 0.3, pointRadius: 0 }] },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: { x: { display: false }, y: { min: 0, max: 50, ticks: { color: '#555' }, grid: { color: '#222' } } },
+            animation: false, plugins: { legend: { display: false } }
+        }
+    });
+
+    [ui.tire, ui.gear, ui.mode].forEach(el => el.addEventListener('change', () => refresh()));
+
+    // --- Demo 機能 ---
+    ui.demoBtn.addEventListener('click', () => {
+        allData = { times: [], speeds: [] };
+        startTime = null; accelFinished = false;
+        const maxSimSpd = 31.8;
+        for (let i = 0; i < 400; i++) {
+            const t = i * 100;
+            let s = maxSimSpd * (1 - Math.exp(-i / 15));
+            if (i > 250) s -= (i - 250) * 0.03; // 熱ダレシミュ
+            s += (Math.random() - 0.5) * 0.5; // ジッターノイズ
+            if (s < 0) s = 0;
+
+            allData.times.push(t);
+            allData.speeds.push(s);
+            processTuning(t, s);
+        }
+        refresh();
+        ui.log.innerText = "Demo data generated. Analyzing simulation...";
+    });
+
+    // --- インポート ---
+    document.getElementById('importBtn').addEventListener('click', () => ui.fileInput.click());
+    ui.fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const lines = event.target.result.split('\n');
+            allData = { times: [], speeds: [] }; startTime = null; accelFinished = false;
+            for (let i = 1; i < lines.length; i++) {
+                const parts = lines[i].split(',');
+                if (parts.length >= 2) {
+                    const t = parseFloat(parts[0]), s = parseFloat(parts[1]);
+                    if (!isNaN(t) && !isNaN(s)) { allData.times.push(t); allData.speeds.push(s); processTuning(t, s); }
+                }
+            }
+            refresh();
+            ui.log.innerText = `Import successful: ${file.name}`;
+        };
+        reader.readAsText(file);
+    });
+
+    // --- シリアル接続 ---
+    ui.connBtn.addEventListener('click', async () => {
+        try {
+            port = await navigator.serial.requestPort();
+            await port.open({ baudRate: 115200 });
+            ui.status.innerText = "CONNECTED"; ui.status.style.color = "var(--accent-color)";
+            ui.connBtn.disabled = true; ui.connBtn.innerText = "計測中...";
+            const decoder = new TextDecoderStream();
+            port.readable.pipeTo(decoder.writable);
+            reader = decoder.readable.getReader();
+            let buf = "";
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                buf += value;
+                let lines = buf.split("\n");
+                buf = lines.pop();
+                for (let line of lines) {
+                    const p = line.trim().split(',');
+                    if (p.length >= 2) {
+                        const t = parseFloat(p[0]), s = parseFloat(p[1]);
+                        if (!isNaN(t) && !isNaN(s)) {
+                            allData.times.push(t); allData.speeds.push(s);
+                            processTuning(t, s); refresh();
+                        }
+                    }
+                }
+            }
+        } catch (e) { resetUI(); }
+    });
+
+    function processTuning(t, s) {
+        if (s > 1.0 && startTime === null) startTime = t;
+        if (startTime !== null && !accelFinished) {
+            const currentMax = Math.max(...allData.speeds);
+            if (s >= currentMax * 0.95 && currentMax > 10) {
+                ui.accelTime.innerText = ((t - startTime) / 1000).toFixed(2);
+                accelFinished = true;
+            }
+        }
+        const windowMs = 10000;
+        const lastT = allData.times[allData.times.length - 1];
+        let startIndex = 0;
+        for (let i = allData.times.length - 1; i >= 0; i--) {
+            if (lastT - allData.times[i] > windowMs) { startIndex = i + 1; break; }
+        }
+        const windowSpeeds = allData.speeds.slice(startIndex);
+        if (windowSpeeds.length > 2) {
+            const avg = windowSpeeds.reduce((a, b) => a + b) / windowSpeeds.length;
+            const var_ = windowSpeeds.map(x => Math.pow(x - avg, 2)).reduce((a, b) => a + b) / windowSpeeds.length;
+            ui.jitter.innerText = Math.sqrt(var_).toFixed(3);
+        }
+    }
+
+    function refresh() {
+        if (allData.speeds.length === 0) return;
+        const tire = parseFloat(ui.tire.value), gear = parseFloat(ui.gear.value);
+        const lastS = allData.speeds[allData.speeds.length-1];
+        ui.curSpd.innerText = lastS.toFixed(1);
+        maxSpeed = Math.max(...allData.speeds);
+        ui.maxSpd.innerText = maxSpeed.toFixed(1);
+        const calcRpm = (s) => (s * 1000000 * gear) / (60 * tire * Math.PI);
+        ui.curRpm.innerText = Math.floor(calcRpm(lastS)).toLocaleString();
+        ui.maxRpm.innerText = Math.floor(calcRpm(maxSpeed)).toLocaleString();
+
+        if (ui.mode.value === 'scroll') {
+            const targetW = Math.max(ui.viewport.offsetWidth * 1.5, allData.speeds.length * 15);
+            ui.wrapper.style.width = targetW + "px";
+            chart.data.labels = allData.times;
+            chart.data.datasets[0].data = allData.speeds;
+            ui.viewport.scrollLeft = targetW;
+        } else {
+            ui.wrapper.style.width = "100%";
+            chart.data.labels = allData.times;
+            chart.data.datasets[0].data = allData.speeds;
+        }
+        chart.update();
+    }
+
+    function resetUI() { ui.status.innerText = "DISCONNECTED"; ui.connBtn.disabled = false; ui.connBtn.innerText = "チェッカー接続"; }
+
+    document.getElementById('exportBtn').addEventListener('click', () => {
+        let csv = "Time,Speed,RPM\n";
+        allData.times.forEach((t, i) => { csv += `${t},${allData.speeds[i]},0\n`; });
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `playTypus_log.csv`; a.click();
+    });
+
+    document.getElementById('clearBtn').addEventListener('click', () => {
+        allData = { times: [], speeds: [] }; startTime = null; accelFinished = false;
+        ui.curSpd.innerText = "0.0"; ui.maxSpd.innerText = "0.0";
+        ui.curRpm.innerText = "0"; ui.maxRpm.innerText = "0";
+        ui.accelTime.innerText = "0.00"; ui.jitter.innerText = "0.000";
+        ui.wrapper.style.width = "100%";
+        chart.data.labels = []; chart.data.datasets[0].data = []; chart.update();
+        ui.log.innerText = "Data cleared.";
+    });
+</script>
+</body>
+</html>
